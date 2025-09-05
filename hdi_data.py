@@ -5,6 +5,7 @@ import os
 import tweepy
 from dotenv import load_dotenv
 load_dotenv()
+LOCK_STATUS_FILE = 'store_lock_status.txt'
 
 
 class ShopifyScraper():
@@ -69,6 +70,27 @@ class ShopifyScraper():
                 
         return products
     
+    def is_store_locked(self):
+        try:
+            res = requests.get(self.baseurl, timeout=5)
+            if res.status_code != 200:
+                print(f"Status code {res.status_code} — assuming locked.")
+                return True
+
+            content = res.text.lower()
+
+            # Shopify password page usually contains this
+            if "password" in content and "this shop is currently password protected" in content:
+                return True
+            if "<title>opening soon</title>" in content:
+                return True
+
+            return False
+
+        except requests.RequestException as e:
+            print(f"Error checking store status: {e}")
+            return True  # assume locked if request fails
+    
 
 
     
@@ -118,6 +140,23 @@ def save_to_csv(products, filename='hiidef_products.csv'):
     
     print(f"Saved {len(products)} products to {filepath}")
 
+def has_store_lock_status_changed(current_status):
+    if os.path.exists(LOCK_STATUS_FILE):
+        with open(LOCK_STATUS_FILE, 'r') as f:
+            previous_status = f.read().strip()
+    else:
+        previous_status = ''
+
+    status_str = 'locked' if current_status else 'unlocked'
+
+    changed = previous_status != status_str
+
+    # Save current status
+    with open(LOCK_STATUS_FILE, 'w') as f:
+        f.write(status_str)
+
+    return changed, previous_status, status_str
+
 def safe_post(tweet): # try to tweet, flag if error
     try:
         API.update_status(tweet)
@@ -143,7 +182,7 @@ def update_tweet(product): # when product id not yet in csv
     safe_post(tweet)
 
 
-def sold_out_tweet(product): # when available flag switched from false to true 
+def sold_out_tweet(product): # when available flag switched from true to false 
     size = product['size']
     name = truncate_title(product['title'], "SOLD OUT", size)
     link = product['url']
@@ -151,7 +190,7 @@ def sold_out_tweet(product): # when available flag switched from false to true
     tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
     safe_post(tweet)
 
-def restocked_tweet(product): # when available flag switched from true to false
+def restocked_tweet(product): # when available flag switched from false to true
     size = product['size']
     name = truncate_title(product['title'], "BACK IN STOCK", size)
     link = product['url']
@@ -166,6 +205,22 @@ def restocked_tweet(product): # when available flag switched from true to false
         
 def main():
     hiidef = ShopifyScraper('https://hiidef.xyz/')
+
+    # Check lock status
+    is_locked = hiidef.is_store_locked()
+    changed, prev, curr = has_store_lock_status_changed(is_locked)
+
+    if changed:
+        print(f"Store lock status changed: {prev} → {curr}")
+        if is_locked:
+            safe_post("The site is now locked.")
+        else:
+            safe_post("The site is now unlocked.")
+
+    if is_locked:
+        print("Store is locked — skipping product scrape.")
+        return []
+    
     results = []
     for page in range(1, 10):
         data = hiidef.download_json(page)
@@ -192,7 +247,7 @@ if __name__ == '__main__':
     auth.set_access_token(access_token, access_token_secret)    
 
     # Create API object
-    API = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
+    API = tweepy.API(auth, wait_on_rate_limit=True)
 
 
 
