@@ -2,6 +2,10 @@
 import requests
 import csv
 import os
+import tweepy
+from dotenv import load_dotenv
+load_dotenv()
+
 
 class ShopifyScraper():
 
@@ -18,7 +22,7 @@ class ShopifyScraper():
         return data if data else None
     
     def normalize_size(self, size_str):
-        """Normalize size names to S, M, L, XL, etc."""
+        # Normalize size names to S, M, L, XL, or blank
         size_str = size_str.lower()
         if 'small' in size_str:
             return 'S'
@@ -67,6 +71,9 @@ class ShopifyScraper():
     
 
 
+    
+
+
 def save_to_csv(products, filename='hiidef_products.csv'):
     if not products:
         print("No products to save.")
@@ -88,9 +95,8 @@ def save_to_csv(products, filename='hiidef_products.csv'):
         vid = str(p['v_id'])
 
         if vid not in existing_products:
-            # TODO: TWEET NEW PRODUCT ADDED
-
-            pass
+            update_tweet(p)
+            
 
         else:
             old = existing_products[vid]
@@ -98,12 +104,10 @@ def save_to_csv(products, filename='hiidef_products.csv'):
             new_available = p['available']
 
             if old_available != new_available:
-                if old_available == True and new_available == False:
-                    #TODO: TWEET SOLD OUT
-                    pass
-                else:
-                    #TODO: TWEET PRODUCT RESTOCKED
-                    pass
+                if old_available == 'True' and new_available == 'False':
+                    sold_out_tweet(p)
+                elif old_available == 'False' and new_available == 'True':
+                    restocked_tweet(p)
 
 
     keys = products[0].keys()
@@ -113,6 +117,33 @@ def save_to_csv(products, filename='hiidef_products.csv'):
         writer.writerows(products)
     
     print(f"Saved {len(products)} products to {filepath}")
+
+def update_tweet(product):
+    name = product['title']
+    size = product['size']
+    link = product['url']
+    
+    tweet = f"NEW PRODUCT: {name} - Size: {size}\n{link}"
+    API.update_status(tweet)
+
+def sold_out_tweet(product):
+    name = product['title']
+    size = product['size']
+    link = product['url']
+    
+    tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
+    API.update_status(tweet)
+
+def restocked_tweet(product):
+    name = product['title']
+    size = product['size']
+    link = product['url']
+    
+    tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
+    API.update_status(tweet)
+
+
+
 
 
         
@@ -131,16 +162,23 @@ def main():
 
 
 if __name__ == '__main__':
+
+    API_key = os.getenv("TWITTER_API_KEY")
+    API_key_secret = os.getenv("TWITTER_API_SECRET")
+    access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+    access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
+
+    auth = tweepy.OAuthHandler(API_key, API_key_secret)
+    auth.set_access_token(access_token, access_token_secret)    
+
+    # Create API object
+    API = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
+
+    if not all([API_key, API_key_secret, access_token, access_token_secret]):
+        raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
+
     products = main()
     save_to_csv(products)
- 
-    # db = dataset.connect('sqlite:///hdi-data.db')
-    # table = db.create_table('hiidef', primary_id='v_id')
-    # products = main()
-    # totals = [item for i in products for item in i] 
-    # print(len(totals))
 
-    # for p in totals:
-    #     if not table.find_one(v_id = p['v_id']):
-    #         table.insert(p)
-    #         print('NEW PRODUCT: ', p)
+ 
+
