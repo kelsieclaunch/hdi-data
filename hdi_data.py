@@ -100,13 +100,13 @@ def save_to_csv(products, filename='hiidef_products.csv'):
 
         else:
             old = existing_products[vid]
-            old_available = old['available']
-            new_available = p['available']
+            old_available = old['available'].lower() == 'true'  # now bool
+            new_available = bool(p['available'])                # already bool
 
             if old_available != new_available:
-                if old_available == 'True' and new_available == 'False':
+                if old_available and not new_available:
                     sold_out_tweet(p)
-                elif old_available == 'False' and new_available == 'True':
+                elif not old_available and new_available:
                     restocked_tweet(p)
 
 
@@ -118,29 +118,46 @@ def save_to_csv(products, filename='hiidef_products.csv'):
     
     print(f"Saved {len(products)} products to {filepath}")
 
-def update_tweet(product):
-    name = product['title']
+def safe_post(tweet): # try to tweet, flag if error
+    try:
+        API.update_status(tweet)
+    except tweepy.TweepyException as e:
+        print(f"Tweet failed: {tweet}\nReason: {e}")
+
+def truncate_title(title, prefix="NEW PRODUCT", size=""): # trim title if needed
+    static_parts = f"{prefix}:  - Size: {size}\n"  # other content
+    reserved_chars = len(static_parts) + 23  # 23 for the link
+    max_title_length = 280 - reserved_chars
+
+    if len(title) <= max_title_length:
+        return title
+    return title[:max_title_length - 1] + "…"
+
+# ACTUALLY TWEETING
+def update_tweet(product): # when product id not yet in csv
     size = product['size']
+    name = truncate_title(product['title'], "NEW PRODUCT", size)
     link = product['url']
     
     tweet = f"NEW PRODUCT: {name} - Size: {size}\n{link}"
-    API.update_status(tweet)
+    safe_post(tweet)
 
-def sold_out_tweet(product):
-    name = product['title']
+
+def sold_out_tweet(product): # when available flag switched from false to true 
     size = product['size']
+    name = truncate_title(product['title'], "SOLD OUT", size)
     link = product['url']
     
     tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
-    API.update_status(tweet)
+    safe_post(tweet)
 
-def restocked_tweet(product):
-    name = product['title']
+def restocked_tweet(product): # when available flag switched from true to false
     size = product['size']
+    name = truncate_title(product['title'], "BACK IN STOCK", size)
     link = product['url']
     
     tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
-    API.update_status(tweet)
+    safe_post(tweet)
 
 
 
@@ -168,14 +185,16 @@ if __name__ == '__main__':
     access_token = os.getenv("TWITTER_ACCESS_TOKEN")
     access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
 
+    if not all([API_key, API_key_secret, access_token, access_token_secret]):
+        raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
+
     auth = tweepy.OAuthHandler(API_key, API_key_secret)
     auth.set_access_token(access_token, access_token_secret)    
 
     # Create API object
     API = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
 
-    if not all([API_key, API_key_secret, access_token, access_token_secret]):
-        raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
+
 
     products = main()
     save_to_csv(products)
