@@ -1,11 +1,15 @@
+import schedule
+import time
 
 import requests
 import csv
 import os
 import tweepy
+from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 LOCK_STATUS_FILE = 'store_lock_status.txt'
+print("Current working directory:", os.getcwd())
 
 
 class ShopifyScraper():
@@ -80,7 +84,7 @@ class ShopifyScraper():
             content = res.text.lower()
 
             # Shopify password page usually contains this
-            if "password" in content and "this shop is currently password protected" in content:
+            if "enter password" in content or "this shop is currently password protected" in content:
                 return True
             if "<title>opening soon</title>" in content:
                 return True
@@ -150,16 +154,21 @@ def has_store_lock_status_changed(current_status):
     status_str = 'locked' if current_status else 'unlocked'
 
     changed = previous_status != status_str
+    
+    print(f"[DEBUG] Previous status: '{previous_status}', Current status: '{status_str}', Changed: {changed}")
 
     # Save current status
     with open(LOCK_STATUS_FILE, 'w') as f:
         f.write(status_str)
+    print(f"[DEBUG] Store lock status file updated to '{status_str}'")
 
     return changed, previous_status, status_str
 
-def safe_post(tweet): # try to tweet, flag if error
+
+def safe_post(tweet):
     try:
-        API.update_status(tweet)
+        response = client.create_tweet(text=tweet)
+        print(f"Tweet posted! ID: {response.data['id']}")
     except tweepy.TweepyException as e:
         print(f"Tweet failed: {tweet}\nReason: {e}")
 
@@ -177,6 +186,8 @@ def update_tweet(product): # when product id not yet in csv
     size = product['size']
     name = truncate_title(product['title'], "NEW PRODUCT", size)
     link = product['url']
+
+    print("tweeting new product flag")
     
     tweet = f"NEW PRODUCT: {name} - Size: {size}\n{link}"
     safe_post(tweet)
@@ -187,6 +198,8 @@ def sold_out_tweet(product): # when available flag switched from true to false
     name = truncate_title(product['title'], "SOLD OUT", size)
     link = product['url']
     
+    print("tweeting sold out flag")
+    
     tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
     safe_post(tweet)
 
@@ -194,9 +207,16 @@ def restocked_tweet(product): # when available flag switched from false to true
     size = product['size']
     name = truncate_title(product['title'], "BACK IN STOCK", size)
     link = product['url']
+    print("tweeting back in stock flag")
     
     tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
     safe_post(tweet)
+
+def job():
+    print("Starting job at", datetime.now())
+    products = main()
+    save_to_csv(products)
+    print("Job finished", flush=True)
 
 
 
@@ -204,6 +224,8 @@ def restocked_tweet(product): # when available flag switched from false to true
 
         
 def main():
+    print("Bot started", flush=True)
+    print("Running hdi_data.py at", datetime.now())
     hiidef = ShopifyScraper('https://hiidef.xyz/')
 
     # Check lock status
@@ -213,11 +235,13 @@ def main():
     if changed:
         print(f"Store lock status changed: {prev} → {curr}")
         if is_locked:
+            print("site locked")
             safe_post("The site is now locked.")
         else:
+            print("site unlocked")
             safe_post("The site is now unlocked.")
 
-    if is_locked:
+    elif is_locked:
         print("Store is locked — skipping product scrape.")
         return []
     
@@ -239,20 +263,31 @@ if __name__ == '__main__':
     API_key_secret = os.getenv("TWITTER_API_SECRET")
     access_token = os.getenv("TWITTER_ACCESS_TOKEN")
     access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
+    bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
 
-    if not all([API_key, API_key_secret, access_token, access_token_secret]):
+    if not all([API_key, API_key_secret, access_token, access_token_secret, bearer_token]):
         raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
 
-    auth = tweepy.OAuthHandler(API_key, API_key_secret)
-    auth.set_access_token(access_token, access_token_secret)    
+   # Create a Tweepy client (v2)
+    client = tweepy.Client(
+        bearer_token=bearer_token,
+        consumer_key=API_key,
+        consumer_secret=API_key_secret,
+        access_token=access_token,
+        access_token_secret=access_token_secret,
+        wait_on_rate_limit=True
+    )
 
-    # Create API object
-    API = tweepy.API(auth, wait_on_rate_limit=True)
+    schedule.every(2).minutes.do(job)
 
 
+    print("Scheduler started. Press Ctrl+C to exit.")
 
-    products = main()
-    save_to_csv(products)
+    job()  
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
  
 

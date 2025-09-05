@@ -1,0 +1,1 @@
+worker: sleep infinity
