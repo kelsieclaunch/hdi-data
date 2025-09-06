@@ -1,5 +1,3 @@
-import schedule
-import time
 
 import requests
 import csv
@@ -278,16 +276,5 @@ if __name__ == '__main__':
         wait_on_rate_limit=True
     )
 
-    schedule.every(2).minutes.do(job)
 
-
-    print("Scheduler started. Press Ctrl+C to exit.")
-
-    job()  
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
- 
 
