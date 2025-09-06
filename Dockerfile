@@ -13,5 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Command to run script
+# Expose the port Cloud Run will use
+EXPOSE 8080
+
+# Command to run Flask app
 CMD ["python", "hdi_data.py"]
+

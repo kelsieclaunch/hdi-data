@@ -5,7 +5,6 @@ import os
 import tweepy
 from datetime import datetime
 from dotenv import load_dotenv
-load_dotenv()
 LOCK_STATUS_FILE = 'store_lock_status.txt'
 print("Current working directory:", os.getcwd())
 
@@ -275,6 +274,22 @@ if __name__ == '__main__':
         access_token_secret=access_token_secret,
         wait_on_rate_limit=True
     )
+
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route('/', methods=['POST'])
+def run_job():
+    print("Received job trigger")
+    job()
+    return 'Job complete', 200
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
 
 
 
