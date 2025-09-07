@@ -5,6 +5,13 @@ import os
 import tweepy
 from datetime import datetime
 from dotenv import load_dotenv
+from google.cloud import firestore
+
+load_dotenv()
+
+db = firestore.Client()
+project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "hdi-scraper")
+
 LOCK_STATUS_FILE = 'store_lock_status.txt'
 print("Current working directory:", os.getcwd())
 
@@ -93,38 +100,36 @@ class ShopifyScraper():
             return True  # assume locked if request fails
     
 
+# # # FIRESTORE VERSION # # # FOR CLOUD RUN
 
-    
-
-
-def save_to_csv(products, filename='hiidef_products.csv'):
+def save_to_firestore(products):
     if not products:
         print("No products to save.")
         return
 
-    # Get the directory of the current script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    filepath = os.path.join(script_dir, filename)
+    product_collection = db.collection('products')
 
-    # Load existing data (if file exists)
-    existing_products = {}
-    if os.path.exists(filepath):
-        with open(filepath, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                existing_products[row['v_id']] = row
+    # Check if this is the first run (no products in DB)
+    existing_docs = list(product_collection.limit(1).stream())
+    is_first_run = len(existing_docs) == 0
+
+    if is_first_run:
+        print("First run detected — saving products without tweeting.")
+    else:
+        print("Existing data found — comparing for changes.")
 
     for p in products:
-        vid = str(p['v_id'])
+        vid = str(p['v_id'])  # Firestore document ID must be a string
+        doc_ref = product_collection.document(vid)
+        doc = doc_ref.get()
 
-        if vid not in existing_products:
-            update_tweet(p)
-            
-
+        if not doc.exists:
+            if not is_first_run:
+                update_tweet(p)
         else:
-            old = existing_products[vid]
-            old_available = old['available'].lower() == 'true'  # now bool
-            new_available = bool(p['available'])                # already bool
+            old = doc.to_dict()
+            old_available = old.get('available', False)
+            new_available = p['available']
 
             if old_available != new_available:
                 if old_available and not new_available:
@@ -132,34 +137,95 @@ def save_to_csv(products, filename='hiidef_products.csv'):
                 elif not old_available and new_available:
                     restocked_tweet(p)
 
+        # Save/update product in Firestore
+        doc_ref.set(p)
 
-    keys = products[0].keys()
-    with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(products)
-    
-    print(f"Saved {len(products)} products to {filepath}")
-
+    print(f"Saved {len(products)} products to Firestore.")
+  
 def has_store_lock_status_changed(current_status):
-    if os.path.exists(LOCK_STATUS_FILE):
-        with open(LOCK_STATUS_FILE, 'r') as f:
-            previous_status = f.read().strip()
-    else:
-        previous_status = ''
+    config_doc = db.collection('config').document('store_lock')
 
     status_str = 'locked' if current_status else 'unlocked'
+    prev_status = None
 
-    changed = previous_status != status_str
+    doc = config_doc.get()
+    if doc.exists:
+        prev_status = doc.to_dict().get('status')
+
+    changed = prev_status != status_str
+
+    config_doc.set({'status': status_str})
+
+    print(f"[DEBUG] Previous: '{prev_status}', Current: '{status_str}', Changed: {changed}")
+
+    return changed, prev_status, status_str
+
+# # # CSV VERSION  # # #
+
+
+# def save_to_csv(products, filename='hiidef_products.csv'):
+#     if not products:
+#         print("No products to save.")
+#         return
+
+#     # Get the directory of the current script
+#     script_dir = os.path.dirname(os.path.abspath(__file__))
+#     filepath = os.path.join(script_dir, filename)
+
+#     # Load existing data (if file exists)
+#     existing_products = {}
+#     if os.path.exists(filepath):
+#         with open(filepath, 'r', encoding='utf-8') as f:
+#             reader = csv.DictReader(f)
+#             for row in reader:
+#                 existing_products[row['v_id']] = row
+
+#     for p in products:
+#         vid = str(p['v_id'])
+
+#         if vid not in existing_products:
+#             update_tweet(p)
+            
+
+#         else:
+#             old = existing_products[vid]
+#             old_available = old['available'].lower() == 'true'  # now bool
+#             new_available = bool(p['available'])                # already bool
+
+#             if old_available != new_available:
+#                 if old_available and not new_available:
+#                     sold_out_tweet(p)
+#                 elif not old_available and new_available:
+#                     restocked_tweet(p)
+
+
+#     keys = products[0].keys()
+#     with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+#         writer = csv.DictWriter(csvfile, fieldnames=keys)
+#         writer.writeheader()
+#         writer.writerows(products)
     
-    print(f"[DEBUG] Previous status: '{previous_status}', Current status: '{status_str}', Changed: {changed}")
+#     print(f"Saved {len(products)} products to {filepath}")
 
-    # Save current status
-    with open(LOCK_STATUS_FILE, 'w') as f:
-        f.write(status_str)
-    print(f"[DEBUG] Store lock status file updated to '{status_str}'")
+# def has_store_lock_status_changed(current_status):
+#     if os.path.exists(LOCK_STATUS_FILE):
+#         with open(LOCK_STATUS_FILE, 'r') as f:
+#             previous_status = f.read().strip()
+#     else:
+#         previous_status = ''
 
-    return changed, previous_status, status_str
+#     status_str = 'locked' if current_status else 'unlocked'
+
+#     changed = previous_status != status_str
+    
+#     print(f"[DEBUG] Previous status: '{previous_status}', Current status: '{status_str}', Changed: {changed}")
+
+#     # Save current status
+#     with open(LOCK_STATUS_FILE, 'w') as f:
+#         f.write(status_str)
+#     print(f"[DEBUG] Store lock status file updated to '{status_str}'")
+
+#     return changed, previous_status, status_str
 
 
 def safe_post(tweet):
@@ -212,7 +278,7 @@ def restocked_tweet(product): # when available flag switched from false to true
 def job():
     print("Starting job at", datetime.now())
     products = main()
-    save_to_csv(products)
+    save_to_firestore(products)
     print("Job finished", flush=True)
 
 
@@ -282,14 +348,16 @@ app = Flask(__name__)
 @app.route('/', methods=['POST'])
 def run_job():
     print("Received job trigger")
-    job()
+    try:
+        job()
+        print("Job finished successfully")
+    except Exception as e:
+        print(f"Job failed: {e}")
     return 'Job complete', 200
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
-
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 
