@@ -81,23 +81,23 @@ class ShopifyScraper():
     def is_store_locked(self):
         try:
             res = requests.get(self.baseurl, timeout=5)
-            if res.status_code != 200:
-                print(f"Status code {res.status_code} — assuming locked.")
-                return True
 
             content = res.text.lower()
 
-            # Shopify password page usually contains this
+            # Look for known lock indicators in content
             if "enter password" in content or "this shop is currently password protected" in content:
                 return True
             if "<title>opening soon</title>" in content:
                 return True
 
+            # If page loads and none of the lock indicators are found, it's not locked
             return False
 
         except requests.RequestException as e:
             print(f"Error checking store status: {e}")
-            return True  # assume locked if request fails
+            # Do not assume locked — just return False and optionally log
+            return False
+
     
 
 # # # FIRESTORE VERSION # # # FOR CLOUD RUN
