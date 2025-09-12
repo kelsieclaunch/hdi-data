@@ -39,7 +39,7 @@ class ShopifyScraper():
             return 'M'
         elif 'large' in size_str and 'x' not in size_str:
             return 'L'
-        elif 'x-large' in size_str or 'extra large' in size_str and not '2' in size_str:
+        elif 'x-large' in size_str and not '2' in size_str:
             return 'XL'
         elif 'xx-large' in size_str or '2x' in size_str:
             return 'XXL'
