@@ -39,7 +39,7 @@ class ShopifyScraper():
             return 'M'
         elif 'large' in size_str and 'x' not in size_str:
             return 'L'
-        elif 'x-large' in size_str or 'extra large' in size_str:
+        elif 'x-large' in size_str or 'extra large' in size_str and not '2' in size_str:
             return 'XL'
         elif 'xx-large' in size_str or '2x' in size_str:
             return 'XXL'
@@ -125,7 +125,8 @@ def save_to_firestore(products):
 
         if not doc.exists:
             if not is_first_run:
-                update_tweet(p)
+                pass
+                # update_tweet(p)
         else:
             old = doc.to_dict()
             old_available = old.get('available', False)
@@ -133,9 +134,11 @@ def save_to_firestore(products):
 
             if old_available != new_available:
                 if old_available and not new_available:
-                    sold_out_tweet(p)
+                    # sold_out_tweet(p)
+                    pass
                 elif not old_available and new_available:
-                    restocked_tweet(p)
+                    # restocked_tweet(p)
+                    pass
 
         # Save/update product in Firestore
         doc_ref.set(p)
