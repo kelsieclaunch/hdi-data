@@ -125,8 +125,7 @@ def save_to_firestore(products):
 
         if not doc.exists:
             if not is_first_run:
-                pass
-                # update_tweet(p)
+                update_tweet(p)
         else:
             old = doc.to_dict()
             old_available = old.get('available', False)
@@ -134,11 +133,9 @@ def save_to_firestore(products):
 
             if old_available != new_available:
                 if old_available and not new_available:
-                    # sold_out_tweet(p)
-                    pass
+                    sold_out_tweet(p)
                 elif not old_available and new_available:
-                    # restocked_tweet(p)
-                    pass
+                    restocked_tweet(p)
 
         # Save/update product in Firestore
         doc_ref.set(p)
