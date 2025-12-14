@@ -85,9 +85,11 @@ class ShopifyScraper():
             content = res.text.lower()
 
             # Look for known lock indicators in content
-            if "enter password" in content or "this shop is currently password protected" in content:
+            if "enter using password" in content or "this shop is currently password protected" in content:
                 return True
             if "<title>opening soon</title>" in content:
+                return True
+            if res.url.rstrip("/").endswith("/password"):
                 return True
 
             # If page loads and none of the lock indicators are found, it's not locked
