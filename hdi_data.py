@@ -84,11 +84,7 @@ class ShopifyScraper():
 
             content = res.text.lower()
 
-            # Look for known lock indicators in content
-            if "enter using password" in content or "this shop is currently password protected" in content:
-                return True
-            if "<title>opening soon</title>" in content:
-                return True
+            # Look for url redirect
             if res.url.rstrip("/").endswith("/password"):
                 return True
 
@@ -304,7 +300,7 @@ def main():
             safe_post("The site is now locked.")
         else:
             print("site unlocked")
-            safe_post("The site is now unlocked.")
+            # safe_post("The site is now unlocked.")
 
     elif is_locked:
         print("Store is locked — skipping product scrape.")
