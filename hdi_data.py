@@ -300,7 +300,7 @@ def main():
             safe_post("The site is now locked.")
         else:
             print("site unlocked")
-            # safe_post("The site is now unlocked.")
+            safe_post("The site is now unlocked.")
 
     elif is_locked:
         print("Store is locked — skipping product scrape.")
