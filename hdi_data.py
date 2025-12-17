@@ -4,8 +4,14 @@ import csv
 import os
 import tweepy
 from datetime import datetime
+from datetime import timezone
 from dotenv import load_dotenv
 from google.cloud import firestore
+
+
+def time_marker():
+    return datetime.now(timezone.utc).strftime("%H:%M UTC")
+
 
 load_dotenv()
 
@@ -228,7 +234,8 @@ def has_store_lock_status_changed(current_status):
 
 def safe_post(tweet):
     try:
-        response = client.create_tweet(text=tweet)
+        tweet_with_time = f"{tweet}\n⏱ {time_marker()}"
+        response = client.create_tweet(text=tweet_with_time)
         print(f"Tweet posted! ID: {response.data['id']}")
     except tweepy.TweepyException as e:
         print(f"Tweet failed: {tweet}\nReason: {e}")
