@@ -234,7 +234,7 @@ def has_store_lock_status_changed(current_status):
 
 def safe_post(tweet):
     try:
-        tweet_with_time = f"{tweet}\n⏱ {time_marker()}"
+        tweet_with_time = f"{tweet}\n {time_marker()}"
         response = client.create_tweet(text=tweet_with_time)
         print(f"Tweet posted! ID: {response.data['id']}")
     except tweepy.TweepyException as e:
