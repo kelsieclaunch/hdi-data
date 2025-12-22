@@ -3,6 +3,7 @@ import requests
 import csv
 import os
 import tweepy
+import time
 from datetime import datetime
 from datetime import timezone
 from dotenv import load_dotenv
@@ -147,6 +148,7 @@ def save_to_firestore(products):
     print(f"Saved {len(products)} products to Firestore.")
   
 def has_store_lock_status_changed(current_status):
+    #Check if the store lock status is different from Firestore, but do NOT update yet
     config_doc = db.collection('config').document('store_lock')
 
     status_str = 'locked' if current_status else 'unlocked'
@@ -158,11 +160,18 @@ def has_store_lock_status_changed(current_status):
 
     changed = prev_status != status_str
 
-    config_doc.set({'status': status_str})
-
     print(f"[DEBUG] Previous: '{prev_status}', Current: '{status_str}', Changed: {changed}")
 
     return changed, prev_status, status_str
+
+
+def update_store_lock_status(current_status):
+    #Save the confirmed store lock status to Firestore.
+    config_doc = db.collection('config').document('store_lock')
+    status_str = 'locked' if current_status else 'unlocked'
+    config_doc.set({'status': status_str})
+    print(f"[DEBUG] Store lock status updated to '{status_str}' in Firestore")
+
 
 # # # CSV VERSION  # # #
 
@@ -301,13 +310,29 @@ def main():
     changed, prev, curr = has_store_lock_status_changed(is_locked)
 
     if changed:
-        print(f"Store lock status changed: {prev} → {curr}")
-        if is_locked:
-            print("site locked")
-            safe_post("The site is now locked.")
+        print(f"Initial lock status changed: {prev} → {curr}")
+        print("Waiting 20 seconds to confirm...")
+        time.sleep(20)  # Wait before confirming
+
+        # Re-check lock status
+        is_locked_after_wait = hiidef.is_store_locked()
+        changed_after_wait, prev_after_wait, curr_after_wait = has_store_lock_status_changed(is_locked_after_wait)
+
+
+        if changed_after_wait:
+            print(f"Confirmed lock status change after wait: {prev_after_wait} → {curr_after_wait}")
+
+             # Commit status now
+            update_store_lock_status(is_locked_after_wait)
+            
+            if is_locked_after_wait:
+                print("Site locked confirmed")
+                safe_post("The site is now locked.")
+            else:
+                print("Site unlocked confirmed")
+                safe_post("The site is now unlocked.")
         else:
-            print("site unlocked")
-            safe_post("The site is now unlocked.")
+            print("Lock status reverted — no tweet sent.")
 
     elif is_locked:
         print("Store is locked — skipping product scrape.")
