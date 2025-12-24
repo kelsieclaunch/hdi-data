@@ -263,10 +263,16 @@ def update_tweet(product): # when product id not yet in csv
     size = product['size']
     name = truncate_title(product['title'], "NEW PRODUCT", size)
     link = product['url']
+    flag = product['available']
+    avail = 'AVAILABLE'
+
+    if flag == 'false':
+        avail = 'UNAVAILABLE'
+
 
     print("tweeting new product flag")
     
-    tweet = f"NEW PRODUCT: {name} - Size: {size}\n{link}"
+    tweet = f"NEW PRODUCT: {name}, {avail} - Size: {size}\n{link}"
     safe_post(tweet)
 
 
