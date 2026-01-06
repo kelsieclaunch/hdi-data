@@ -378,6 +378,9 @@ def main():
         if unlocked:
             print("Store unlocked successfully — internal unlock")
             internal_unlock = True  
+            hiidef.session.cookies.set('shopify_password', STORE_PASSWORD, domain='hiidef.xyz')
+
+            internal_unlock = True  
             results = []
             for page in range(1, 10):
                 data = hiidef.download_json(page)
