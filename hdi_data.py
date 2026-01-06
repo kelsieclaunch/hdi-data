@@ -380,6 +380,7 @@ def main():
 
         if unlocked:
             print("Store unlocked successfully")
+            time.sleep(5)
         else:
             print("Unlock attempt failed or not needed")
 
