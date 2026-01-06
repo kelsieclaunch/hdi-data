@@ -42,7 +42,7 @@ class ShopifyScraper():
         url = self.baseurl.rstrip('/') + f'/products.json?limit=250&page={page}'
         auth = None
         if self.enable_password and self.password:
-            auth = HTTPBasicAuth('', self.password)  # empty username + password
+            auth = HTTPBasicAuth('any', self.password)  # empty username + password
 
         try:
             r = self.session.get(url, auth=auth, timeout=10)
