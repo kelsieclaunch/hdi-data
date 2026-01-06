@@ -378,6 +378,16 @@ def main():
         if unlocked:
             print("Store unlocked successfully — internal unlock")
             internal_unlock = True  
+            results = []
+            for page in range(1, 10):
+                data = hiidef.download_json(page)
+                print('Getting page ', page)
+                if not data:
+                    print(f'Completed, total pages = {page - 1}' )
+                    break
+                parsed = hiidef.parse_json(data)
+                results.extend(parsed)
+            return results
         else:
             print("Unlock attempt failed or not needed")
 
