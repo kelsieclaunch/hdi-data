@@ -9,7 +9,7 @@ from datetime import timezone
 from dotenv import load_dotenv
 from google.cloud import firestore
 from bs4 import BeautifulSoup
-from requests.auth import HTTPBasicAuth
+
 
 def time_marker():
     return datetime.now(timezone.utc).strftime("%H:%M UTC")
@@ -39,23 +39,21 @@ class ShopifyScraper():
 
 
     def download_json(self, page):
-        url = self.baseurl.rstrip('/') + f'/products.json?limit=250&page={page}'
-        auth = None
-        if self.enable_password and self.password:
-            auth = HTTPBasicAuth('any', self.password)  # empty username + password
+        # Unlock the store first if needed
+        if self.enable_password: 
+            self.unlock_store() 
 
-        try:
-            r = self.session.get(url, auth=auth, timeout=10)
-            r.raise_for_status()  # raise exception for 4xx/5xx
-            data = r.json().get('products', [])
-            return data if data else None
-        except requests.exceptions.HTTPError as e:
-            print(f"HTTP Error {r.status_code}: {e}")
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
+        url = f"{self.baseurl}/products.json?limit=250&page={page}"  
+        try: 
+            r = self.session.get(url, timeout=10) 
+            r.raise_for_status() 
+            return r.json().get('products', []) 
+        except requests.exceptions.HTTPError as e: 
+            print(f"HTTP Error {r.status_code}: {e}") 
+        except requests.exceptions.RequestException as e: 
+            print(f"Request failed: {e}") 
         return None
+
 
 
     
@@ -133,6 +131,24 @@ class ShopifyScraper():
             print(f"Error checking store status: {e}")
             # Do not assume locked — just return False and optionally log
             return False
+        
+    def unlock_store(self):
+        """Submit the Shopify storefront password to get access to /products.json"""
+        if not self.enable_password or not self.password:
+            return
+
+        password_url = f"{self.baseurl}/password"
+        data = {'password': self.password}
+
+        try:
+            res = self.session.post(password_url, data=data, timeout=10)
+            if res.status_code == 200:
+                print("Store unlocked successfully!")
+            else:
+                print(f"Failed to unlock store: {res.status_code}")
+        except requests.RequestException as e:
+            print(f"Error unlocking store: {e}")
+
         
 
 
