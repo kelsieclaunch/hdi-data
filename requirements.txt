@@ -3,3 +3,4 @@ requests
 python-dotenv
 flask
 google-cloud-firestore
+beautifulsoup4==4.12.3
