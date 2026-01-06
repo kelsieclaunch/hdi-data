@@ -316,9 +316,9 @@ def main():
         else:
             print("Lock status reverted — no tweet sent.")
 
-    elif is_locked:
-        print("Store is locked — skipping product scrape.")
-        return []
+    # elif is_locked:
+    #     print("Store is locked — skipping product scrape.")
+    #     return []
     
     results = []
     for page in range(1, 10):
