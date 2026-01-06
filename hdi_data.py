@@ -9,6 +9,7 @@ from datetime import timezone
 from dotenv import load_dotenv
 from google.cloud import firestore
 from bs4 import BeautifulSoup
+from requests.auth import HTTPBasicAuth
 
 def time_marker():
     return datetime.now(timezone.utc).strftime("%H:%M UTC")
@@ -35,22 +36,27 @@ class ShopifyScraper():
         self.password = password
         self.session = requests.Session()
 
-    def download_json(self, page):
-        url = self.baseurl + f'products.json?limit=250&page={page}'
 
-        # If password-protected, use HTTP Basic Auth
+
+    def download_json(self, page):
+        url = self.baseurl.rstrip('/') + f'/products.json?limit=250&page={page}'
         auth = None
         if self.enable_password and self.password:
-            auth = ('any', self.password) 
+            auth = HTTPBasicAuth('', self.password)  # empty username + password
 
-        r = self.session.get(url, auth=auth, timeout=5)
+        try:
+            r = self.session.get(url, auth=auth, timeout=10)
+            r.raise_for_status()  # raise exception for 4xx/5xx
+            data = r.json().get('products', [])
+            return data if data else None
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP Error {r.status_code}: {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+        return None
 
-        if r.status_code != 200:
-            print('Bad status code: ' + str(r.status_code))
-            return None
-
-        data = r.json().get('products', [])
-        return data if data else None
 
     
     def normalize_size(self, size_str):
@@ -128,39 +134,6 @@ class ShopifyScraper():
             # Do not assume locked — just return False and optionally log
             return False
         
-    def unlock_store(self):
-        if not self.enable_password or not self.password:
-            return False
-
-        try:
-            res = self.session.get(self.baseurl, timeout=5)
-
-            soup = BeautifulSoup(res.text, "html.parser")
-            form = soup.find("form")
-
-            if not form:
-                return False
-
-            action = form.get("action", "/password")
-
-            payload = {
-                "password": self.password,
-                "form_type": "storefront_password",
-                "utf8": "✓"
-            }
-
-            post = self.session.post(
-                self.baseurl.rstrip("/") + action,
-                data=payload,
-                timeout=5,
-                allow_redirects=True
-            )
-
-            return "/password" not in post.url
-
-        except requests.RequestException as e:
-            print(f"Unlock attempt failed: {e}")
-            return False
 
 
     
@@ -233,72 +206,6 @@ def update_store_lock_status(current_status):
     print(f"[DEBUG] Store lock status updated to '{status_str}' in Firestore")
 
 
-# # # CSV VERSION  # # #
-
-
-# def save_to_csv(products, filename='hiidef_products.csv'):
-#     if not products:
-#         print("No products to save.")
-#         return
-
-#     # Get the directory of the current script
-#     script_dir = os.path.dirname(os.path.abspath(__file__))
-#     filepath = os.path.join(script_dir, filename)
-
-#     # Load existing data (if file exists)
-#     existing_products = {}
-#     if os.path.exists(filepath):
-#         with open(filepath, 'r', encoding='utf-8') as f:
-#             reader = csv.DictReader(f)
-#             for row in reader:
-#                 existing_products[row['v_id']] = row
-
-#     for p in products:
-#         vid = str(p['v_id'])
-
-#         if vid not in existing_products:
-#             update_tweet(p)
-            
-
-#         else:
-#             old = existing_products[vid]
-#             old_available = old['available'].lower() == 'true'  # now bool
-#             new_available = bool(p['available'])                # already bool
-
-#             if old_available != new_available:
-#                 if old_available and not new_available:
-#                     sold_out_tweet(p)
-#                 elif not old_available and new_available:
-#                     restocked_tweet(p)
-
-
-#     keys = products[0].keys()
-#     with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-#         writer = csv.DictWriter(csvfile, fieldnames=keys)
-#         writer.writeheader()
-#         writer.writerows(products)
-    
-#     print(f"Saved {len(products)} products to {filepath}")
-
-# def has_store_lock_status_changed(current_status):
-#     if os.path.exists(LOCK_STATUS_FILE):
-#         with open(LOCK_STATUS_FILE, 'r') as f:
-#             previous_status = f.read().strip()
-#     else:
-#         previous_status = ''
-
-#     status_str = 'locked' if current_status else 'unlocked'
-
-#     changed = previous_status != status_str
-    
-#     print(f"[DEBUG] Previous status: '{previous_status}', Current status: '{status_str}', Changed: {changed}")
-
-#     # Save current status
-#     with open(LOCK_STATUS_FILE, 'w') as f:
-#         f.write(status_str)
-#     print(f"[DEBUG] Store lock status file updated to '{status_str}'")
-
-#     return changed, previous_status, status_str
 
 
 def safe_post(tweet):
@@ -378,31 +285,10 @@ def main():
     # Check lock status
     is_locked = hiidef.is_store_locked()
 
-    internal_unlock = False  
-    if is_locked and ENABLE_STORE_PASSWORD:
-        unlocked = hiidef.unlock_store()
-        if unlocked:
-            print("Store unlocked successfully — internal unlock") 
-
-            internal_unlock = True  
-            results = []
-            for page in range(1, 10):
-                data = hiidef.download_json(page)
-                print('Getting page ', page)
-                if not data:
-                    print(f'Completed, total pages = {page - 1}' )
-                    break
-                parsed = hiidef.parse_json(data)
-                results.extend(parsed)
-            return results
-        else:
-            print("Unlock attempt failed or not needed")
-
-
 
     changed, prev, curr = has_store_lock_status_changed(is_locked)
 
-    if changed and not internal_unlock:
+    if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
         print("Waiting 20 seconds to confirm...")
         time.sleep(20)  # Wait before confirming
