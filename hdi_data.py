@@ -372,25 +372,20 @@ def main():
     # Check lock status
     is_locked = hiidef.is_store_locked()
 
-    # attempt unlock
+    internal_unlock = False  
     if is_locked and ENABLE_STORE_PASSWORD:
-        print("Store locked — attempting password unlock")
-        
-        unlocked = hiidef.unlock_store()  # call only once
-
+        unlocked = hiidef.unlock_store()
         if unlocked:
-            print("Store unlocked successfully")
-            time.sleep(5)
+            print("Store unlocked successfully — internal unlock")
+            internal_unlock = True  
         else:
             print("Unlock attempt failed or not needed")
 
-        # re-check actual lock status
-        is_locked = hiidef.is_store_locked()
 
 
     changed, prev, curr = has_store_lock_status_changed(is_locked)
 
-    if changed:
+    if changed and not internal_unlock:
         print(f"Initial lock status changed: {prev} → {curr}")
         print("Waiting 20 seconds to confirm...")
         time.sleep(20)  # Wait before confirming
@@ -406,12 +401,15 @@ def main():
              # Commit status now
             update_store_lock_status(is_locked_after_wait)
 
+            
             if is_locked_after_wait:
                 print("Site locked confirmed")
                 safe_post("The site is now locked.")
             else:
                 print("Site unlocked confirmed")
                 safe_post("The site is now unlocked.")
+           
+
         else:
             print("Lock status reverted — no tweet sent.")
 
