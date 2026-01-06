@@ -36,16 +36,22 @@ class ShopifyScraper():
         self.session = requests.Session()
 
     def download_json(self, page):
-        r = self.session.get(
-            self.baseurl + f'products.json?limit=250&page={page}',
-            timeout=5
-        )
+        url = self.baseurl + f'products.json?limit=250&page={page}'
+
+        # If password-protected, use HTTP Basic Auth
+        auth = None
+        if self.enable_password and self.password:
+            auth = ('any', self.password) 
+
+        r = self.session.get(url, auth=auth, timeout=5)
+
         if r.status_code != 200:
             print('Bad status code: ' + str(r.status_code))
             return None
-        
+
         data = r.json().get('products', [])
         return data if data else None
+
     
     def normalize_size(self, size_str):
         # Normalize size names to S, M, L, XL, or blank
@@ -376,9 +382,7 @@ def main():
     if is_locked and ENABLE_STORE_PASSWORD:
         unlocked = hiidef.unlock_store()
         if unlocked:
-            print("Store unlocked successfully — internal unlock")
-            internal_unlock = True  
-            hiidef.session.cookies.set('shopify_password', STORE_PASSWORD, domain='hiidef.xyz')
+            print("Store unlocked successfully — internal unlock") 
 
             internal_unlock = True  
             results = []
