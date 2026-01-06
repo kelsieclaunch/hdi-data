@@ -16,6 +16,10 @@ def time_marker():
 
 load_dotenv()
 
+ENABLE_STORE_PASSWORD = os.getenv("ENABLE_STORE_PASSWORD", "false").lower() == "true"
+STORE_PASSWORD = os.getenv("SHOPIFY_STORE_PASSWORD")
+
+
 db = firestore.Client()
 project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "hdi-scraper")
 
@@ -25,11 +29,17 @@ print("Current working directory:", os.getcwd())
 
 class ShopifyScraper():
 
-    def __init__(self, baseurl):
+    def __init__(self, baseurl, enable_password=False, password=None):
         self.baseurl = baseurl
+        self.enable_password = enable_password
+        self.password = password
+        self.session = requests.Session()
 
     def download_json(self, page):
-        r = requests.get(self.baseurl + f'products.json?limit=250&page={page}', timeout=5)
+        r = self.session.get(
+            self.baseurl + f'products.json?limit=250&page={page}',
+            timeout=5
+        )
         if r.status_code != 200:
             print('Bad status code: ' + str(r.status_code))
             return None
@@ -87,9 +97,7 @@ class ShopifyScraper():
     
     def is_store_locked(self):
         try:
-            res = requests.get(self.baseurl, timeout=5)
-
-            content = res.text.lower()
+            res = self.session.get(self.baseurl, timeout=5)
 
             # Look for url redirect
             if res.url.rstrip("/").endswith("/password"):
@@ -113,6 +121,41 @@ class ShopifyScraper():
             print(f"Error checking store status: {e}")
             # Do not assume locked — just return False and optionally log
             return False
+        
+    def unlock_store(self):
+        if not self.enable_password or not self.password:
+            return False
+
+        try:
+            res = self.session.get(self.baseurl, timeout=5)
+
+            soup = BeautifulSoup(res.text, "html.parser")
+            form = soup.find("form")
+
+            if not form:
+                return False
+
+            action = form.get("action", "/password")
+
+            payload = {
+                "password": self.password,
+                "form_type": "storefront_password",
+                "utf8": "✓"
+            }
+
+            post = self.session.post(
+                self.baseurl.rstrip("/") + action,
+                data=payload,
+                timeout=5,
+                allow_redirects=True
+            )
+
+            return "/password" not in post.url
+
+        except requests.RequestException as e:
+            print(f"Unlock attempt failed: {e}")
+            return False
+
 
     
 
@@ -320,10 +363,30 @@ def job():
 def main():
     print("Bot started", flush=True)
     print("Running hdi_data.py at", datetime.now())
-    hiidef = ShopifyScraper('https://hiidef.xyz/')
+    hiidef = ShopifyScraper(
+        'https://hiidef.xyz/',
+        enable_password=ENABLE_STORE_PASSWORD,
+        password=STORE_PASSWORD
+    )
 
     # Check lock status
     is_locked = hiidef.is_store_locked()
+
+    # attempt unlock
+    if is_locked and ENABLE_STORE_PASSWORD:
+        print("Store locked — attempting password unlock")
+        
+        unlocked = hiidef.unlock_store()  # call only once
+
+        if unlocked:
+            print("Store unlocked successfully")
+        else:
+            print("Unlock attempt failed or not needed")
+
+        # re-check actual lock status
+        is_locked = hiidef.is_store_locked()
+
+
     changed, prev, curr = has_store_lock_status_changed(is_locked)
 
     if changed:
