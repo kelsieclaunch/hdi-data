@@ -242,41 +242,43 @@ def truncate_title(title, prefix="NEW PRODUCT", size=""): # trim title if needed
     return title[:max_title_length - 1] + "…"
 
 # ACTUALLY TWEETING
-def update_tweet(product): # when product id not yet in csv
+def update_tweet(product):
     size = product['size']
     name = truncate_title(product['title'], "NEW PRODUCT", size)
     link = product['url']
-    flag = product['available']
-    avail = 'AVAILABLE'
 
-    if flag is False:
-        avail = 'UNAVAILABLE'
-
+    flag = bool(product.get('available', False))  
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
 
     print("tweeting new product flag")
-    
     tweet = f"NEW PRODUCT: {name}, {avail} - Size: {size}\n{link}"
     safe_post(tweet)
 
 
-def sold_out_tweet(product): # when available flag switched from true to false 
+
+def sold_out_tweet(product): #avail flag false to true
     size = product['size']
     name = truncate_title(product['title'], "SOLD OUT", size)
     link = product['url']
-    
+    flag = bool(product.get('available', False))
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
+
     print("tweeting sold out flag")
-    
     tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
     safe_post(tweet)
+    
 
-def restocked_tweet(product): # when available flag switched from false to true
+def restocked_tweet(product): #avail flag true to false
     size = product['size']
     name = truncate_title(product['title'], "BACK IN STOCK", size)
     link = product['url']
+    flag = bool(product.get('available', False))
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
+
     print("tweeting back in stock flag")
-    
     tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
     safe_post(tweet)
+
 
 def job():
     print("Starting job at", datetime.now())
