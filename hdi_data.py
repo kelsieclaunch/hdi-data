@@ -249,7 +249,7 @@ def update_tweet(product): # when product id not yet in csv
     flag = product['available']
     avail = 'AVAILABLE'
 
-    if flag == 'false':
+    if flag is False:
         avail = 'UNAVAILABLE'
 
 
