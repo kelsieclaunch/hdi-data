@@ -102,7 +102,7 @@ class ShopifyScraper():
                 href="#LoginModal",
                 class_="js-modal-open-login-modal"
             )
-            
+
             if login_link and "enter using password" in login_link.get_text(strip=True).lower():
                 return True 
 
@@ -367,30 +367,35 @@ def main():
     return results
 
 
-if __name__ == '__main__':
 
-    API_key = os.getenv("TWITTER_API_KEY")
-    API_key_secret = os.getenv("TWITTER_API_SECRET")
-    access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-    access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
-    bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
 
-    if not all([API_key, API_key_secret, access_token, access_token_secret, bearer_token]):
-        raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
+API_key = os.getenv("TWITTER_API_KEY")
+API_key_secret = os.getenv("TWITTER_API_SECRET")
+access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+access_token_secret = os.getenv("TWITTER_ACCESS_SECRET")
+bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
 
-   # Create a Tweepy client (v2)
-    client = tweepy.Client(
-        bearer_token=bearer_token,
-        consumer_key=API_key,
-        consumer_secret=API_key_secret,
-        access_token=access_token,
-        access_token_secret=access_token_secret,
-        wait_on_rate_limit=True
-    )
+if not all([API_key, API_key_secret, access_token, access_token_secret, bearer_token]):
+    raise EnvironmentError("Missing Twitter credentials. Check your .env file.")
+
+# Create a Tweepy client (v2)
+client = tweepy.Client(
+    bearer_token=bearer_token,
+    consumer_key=API_key,
+    consumer_secret=API_key_secret,
+    access_token=access_token,
+    access_token_secret=access_token_secret,
+    wait_on_rate_limit=True
+)
 
 from flask import Flask, request
 
 app = Flask(__name__)
+
+@app.route('/', methods=['GET'])
+def health_check():
+    return 'OK', 200
+
 
 @app.route('/', methods=['POST'])
 def run_job():
@@ -402,9 +407,10 @@ def run_job():
         print(f"Job failed: {e}")
     return 'Job complete', 200
 
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 
 
