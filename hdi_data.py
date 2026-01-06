@@ -8,7 +8,7 @@ from datetime import datetime
 from datetime import timezone
 from dotenv import load_dotenv
 from google.cloud import firestore
-
+from bs4 import BeautifulSoup
 
 def time_marker():
     return datetime.now(timezone.utc).strftime("%H:%M UTC")
@@ -94,6 +94,17 @@ class ShopifyScraper():
             # Look for url redirect
             if res.url.rstrip("/").endswith("/password"):
                 return True
+            
+            # Look for password modal link
+            soup = BeautifulSoup(res.text, "html.parser")
+            login_link = soup.find(
+                "a",
+                href="#LoginModal",
+                class_="js-modal-open-login-modal"
+            )
+            
+            if login_link and "enter using password" in login_link.get_text(strip=True).lower():
+                return True 
 
             # If page loads and none of the lock indicators are found, it's not locked
             return False
@@ -317,8 +328,8 @@ def main():
 
     if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
-        print("Waiting 61 seconds to confirm...")
-        time.sleep(61)  # Wait before confirming
+        print("Waiting 20 seconds to confirm...")
+        time.sleep(20)  # Wait before confirming
 
         # Re-check lock status
         is_locked_after_wait = hiidef.is_store_locked()
