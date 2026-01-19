@@ -130,7 +130,7 @@ class ShopifyScraper():
         except requests.RequestException as e:
             print(f"Error checking store status: {e}")
             # Do not assume locked — just return False and optionally log
-            return False
+            return None
         
     def unlock_store(self):
         """Submit the Shopify storefront password to get access to /products.json"""
@@ -304,7 +304,10 @@ def main():
     is_locked = hiidef.is_store_locked()
 
 
-    changed, prev, curr = has_store_lock_status_changed(is_locked)
+    if is_locked is None:
+        print("Lock status unknown due to error — skipping lock state checks")
+    else:
+        changed, prev, curr = has_store_lock_status_changed(is_locked)
 
     if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
