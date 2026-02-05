@@ -1,4 +1,3 @@
-
 import requests
 import csv
 import os
@@ -130,7 +129,7 @@ class ShopifyScraper():
         except requests.RequestException as e:
             print(f"Error checking store status: {e}")
             # Do not assume locked — just return False and optionally log
-            return False
+            return None
         
     def unlock_store(self):
         """Submit the Shopify storefront password to get access to /products.json"""
@@ -177,41 +176,22 @@ def save_to_firestore(products):
         doc_ref = product_collection.document(vid)
         doc = doc_ref.get()
 
-        now = datetime.now(timezone.utc)
-        last_tweeted = None
-
-        if doc.exists:
+        if not doc.exists:
+            if not is_first_run:
+                update_tweet(p)
+        else:
             old = doc.to_dict()
             old_available = old.get('available', False)
             new_available = p['available']
-            last_tweeted = old.get('last_tweeted_at')
 
-            # Convert Firestore timestamp to datetime if needed
-            if last_tweeted:
-                if isinstance(last_tweeted, str):
-                    last_tweeted = datetime.fromisoformat(last_tweeted)
-                # If last tweet was within 5 minutes, skip
-                if (now - last_tweeted).total_seconds() < 300:
-                    print(f"Skipping tweet for {p['title']} — recently tweeted")
-                    doc_ref.set(p, merge=True)  # still save product update
-                    continue
-
-            # Tweet only if availability changed
             if old_available != new_available:
                 if old_available and not new_available:
-                    sold_out_tweet(p, doc_ref)
+                    sold_out_tweet(p)
                 elif not old_available and new_available:
-                    restocked_tweet(p, doc_ref)
+                    restocked_tweet(p)
 
-        else:
-            # New product
-            is_first_run = len(list(product_collection.limit(1).stream())) == 0
-            if not is_first_run:
-                update_tweet(p, doc_ref)
-
-    # Save/update product in Firestore
-    doc_ref.set(p, merge=True)
-
+        # Save/update product in Firestore
+        doc_ref.set(p)
 
     print(f"Saved {len(products)} products to Firestore.")
   
@@ -243,17 +223,11 @@ def update_store_lock_status(current_status):
 
 
 
-def safe_post(tweet, doc_ref=None):
+def safe_post(tweet):
     try:
         tweet_with_time = f"{tweet}\n {time_marker()}"
         response = client.create_tweet(text=tweet_with_time)
         print(f"Tweet posted! ID: {response.data['id']}")
-
-        # Record timestamp in Firestore to prevent stale tweets
-        now = datetime.now(timezone.utc)
-        if doc_ref:
-            doc_ref.update({'last_tweeted_at': now})
-
     except tweepy.TweepyException as e:
         print(f"Tweet failed: {tweet}\nReason: {e}")
 
@@ -267,37 +241,42 @@ def truncate_title(title, prefix="NEW PRODUCT", size=""): # trim title if needed
     return title[:max_title_length - 1] + "…"
 
 # ACTUALLY TWEETING
-def update_tweet(product, doc_ref=None):
+def update_tweet(product):
     size = product['size']
     name = truncate_title(product['title'], "NEW PRODUCT", size)
     link = product['url']
-    avail = 'AVAILABLE' if product.get('available', False) else 'UNAVAILABLE'
 
+    flag = bool(product.get('available', False))  
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
+
+    print("tweeting new product flag")
     tweet = f"NEW PRODUCT: {name}, {avail} - Size: {size}\n{link}"
-    safe_post(tweet, doc_ref)
+    safe_post(tweet)
 
 
 
-
-def sold_out_tweet(product, doc_ref=None):
+def sold_out_tweet(product): #avail flag false to true
     size = product['size']
     name = truncate_title(product['title'], "SOLD OUT", size)
     link = product['url']
+    flag = bool(product.get('available', False))
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
+
+    print("tweeting sold out flag")
     tweet = f"SOLD OUT: {name} - Size: {size}\n{link}"
-    safe_post(tweet, doc_ref)
+    safe_post(tweet)
     
 
-def restocked_tweet(product, doc_ref=None):
+def restocked_tweet(product): #avail flag true to false
     size = product['size']
     name = truncate_title(product['title'], "BACK IN STOCK", size)
     link = product['url']
-    tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
-    safe_post(tweet, doc_ref)
+    flag = bool(product.get('available', False))
+    avail = 'AVAILABLE' if flag else 'UNAVAILABLE'
 
-def flush_stale_tweets():
-    print("Flushing old tweet timestamps to prevent stale tweets...")
-    for doc in db.collection('products').stream():
-        doc.reference.update({'last_tweeted_at': datetime.now(timezone.utc)})
+    print("tweeting back in stock flag")
+    tweet = f"BACK IN STOCK: {name} - Size: {size}\n{link}"
+    safe_post(tweet)
 
 
 def job():
@@ -313,7 +292,6 @@ def job():
         
 def main():
     print("Bot started", flush=True)
-    # flush_stale_tweets()
     print("Running hdi_data.py at", datetime.now())
     hiidef = ShopifyScraper(
         'https://hiidef.xyz/',
@@ -325,7 +303,10 @@ def main():
     is_locked = hiidef.is_store_locked()
 
 
-    changed, prev, curr = has_store_lock_status_changed(is_locked)
+    if is_locked is None:
+        print("Lock status unknown due to error — skipping lock state checks")
+    else:
+        changed, prev, curr = has_store_lock_status_changed(is_locked)
 
     if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
@@ -415,6 +396,3 @@ def run_job():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=True)
-
-
-
