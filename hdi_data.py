@@ -313,7 +313,7 @@ def job():
         
 def main():
     print("Bot started", flush=True)
-    flush_stale_tweets()
+    # flush_stale_tweets()
     print("Running hdi_data.py at", datetime.now())
     hiidef = ShopifyScraper(
         'https://hiidef.xyz/',
