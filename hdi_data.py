@@ -311,7 +311,7 @@ def main():
     if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
         print("Waiting 20 seconds to confirm...")
-        time.sleep(50)  # Wait before confirming
+        time.sleep(30)  # Wait before confirming
 
         # Re-check lock status
         is_locked_after_wait = hiidef.is_store_locked()
