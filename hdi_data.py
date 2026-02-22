@@ -196,7 +196,7 @@ def save_to_firestore(products):
     print(f"Saved {len(products)} products to Firestore.")
   
 def has_store_lock_status_changed(current_status):
-    #Check if the store lock status is different from Firestore, but do NOT update yet
+    #Check if the store lock status is different from Firestore, but dont update yet
     config_doc = db.collection('config').document('store_lock')
 
     status_str = 'locked' if current_status else 'unlocked'
@@ -310,7 +310,7 @@ def main():
 
     if changed:
         print(f"Initial lock status changed: {prev} → {curr}")
-        print("Waiting 20 seconds to confirm...")
+        print("Waiting 30 seconds to confirm...")
         time.sleep(30)  # Wait before confirming
 
         # Re-check lock status
@@ -318,7 +318,7 @@ def main():
         changed_after_wait, prev_after_wait, curr_after_wait = has_store_lock_status_changed(is_locked_after_wait)
 
 
-        if changed_after_wait:
+        if changed_after_wait and is_locked_after_wait is not None:
             print(f"Confirmed lock status change after wait: {prev_after_wait} → {curr_after_wait}")
 
              # Commit status now
@@ -328,7 +328,7 @@ def main():
             if is_locked_after_wait:
                 print("Site locked confirmed")
                 safe_post("The site is now locked.")
-            else:
+            elif not is_locked_after_wait:
                 print("Site unlocked confirmed")
                 safe_post("The site is now unlocked.")
            
@@ -336,9 +336,6 @@ def main():
         else:
             print("Lock status reverted — no tweet sent.")
 
-    # elif is_locked:
-    #     print("Store is locked — skipping product scrape.")
-    #     return []
     
     results = []
     for page in range(1, 10):
