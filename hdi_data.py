@@ -367,13 +367,11 @@ def main():
         password=STORE_PASSWORD
     )
 
-    # Check lock status
-    is_locked = hiidef.is_store_locked()
+    v1_result = hiidef.is_store_locked()
+    is_locked = hiidef.is_store_locked_v2()
 
-    # BETA TESTING NEW LOCK CHECK 
-    is_locked_v2 = hiidef.is_store_locked_v2()
-    print(f"[BETA DEBUG] v1={is_locked} | v2={is_locked_v2}")
-    # END BETA TEST 
+    print(f"[DEBUG] v1={v1_result} | v2={is_locked}")
+
 
 
     if is_locked is None:
