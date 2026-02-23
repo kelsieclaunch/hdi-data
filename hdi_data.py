@@ -1,5 +1,4 @@
 import requests
-import csv
 import os
 import tweepy
 import time
@@ -114,22 +113,86 @@ class ShopifyScraper():
             
             # Look for password modal link
             soup = BeautifulSoup(res.text, "html.parser")
-            login_link = soup.find(
-                "a",
-                href="#LoginModal",
-                class_="js-modal-open-login-modal"
-            )
 
-            if login_link and "enter using password" in login_link.get_text(strip=True).lower():
-                return True 
+            for form in soup.find_all("form"):
+                action = form.get("action", "")
+                if "/password" in action:
+                    return True
+            
 
             # If page loads and none of the lock indicators are found, it's not locked
             return False
 
         except requests.RequestException as e:
             print(f"Error checking store status: {e}")
-            # Do not assume locked — just return False and optionally log
+            # Do not assume locked on error, return None to indicate unknown status
             return None
+        
+    # SECONDARY CHECK JUST TO TRY
+    def is_products_locked(self):
+        try:
+            url = f"{self.baseurl}/products.json?limit=1"
+            res = self.session.get(url, timeout=5, allow_redirects=False)
+
+            if res.status_code == 401: #Unauthorized
+                return True
+            
+            if res.status_code in (301, 302): #redirect
+                location = res.headers.get("Location", "")
+                if "/password" in location:
+                    return True
+                
+            if res.status_code == 200: #Success
+                return False
+            
+            print(f"[DEBUG] Unexpected status code when checking products.json: {res.status_code}")
+            return None
+        
+        except requests.RequestException as e:
+            print(f"Error checking products.json: {e}")
+            return None
+        
+    def is_store_locked_v2(self):
+
+        homepage_result = None
+        products_result = None
+
+        try:
+            res = self.session.get(self.baseurl, timeout=5, allow_redirects=True)
+
+            if res.url.rstrip("/").endswith("/password"):
+                homepage_result = True
+            else:
+                soup = BeautifulSoup(res.text, "html.parser")
+
+                for form in soup.find_all("form"):
+                    action = form.get("action", "")
+                    if "/password" in action:
+                        homepage_result = True
+                        break
+                else:
+                    homepage_result = False
+
+        except requests.RequestException as e:
+            print(f"[DEBUG] Error checking homepage: {e}")
+            homepage_result = None
+
+        # test product check
+
+        products_result = self.is_products_locked()
+
+        print(f"[DEBUG] Store lock check results - Homepage: {homepage_result}, Products: {products_result}")
+
+        if homepage_result is None or products_result is None:
+            return None
+        
+        if homepage_result == products_result:
+            return homepage_result
+        
+        print("[DEBUG] Lock detection mismatch")
+        return None
+    
+    # END BETA HELPER FUNCTIONS
         
     def unlock_store(self):
         """Submit the Shopify storefront password to get access to /products.json"""
@@ -197,12 +260,17 @@ def save_to_firestore(products):
   
 def has_store_lock_status_changed(current_status):
     #Check if the store lock status is different from Firestore, but dont update yet
+    if current_status is None:
+        print("[DEBUG]Current lock status is unknown — skipping change check.")
+        return False, None, None
+    
     config_doc = db.collection('config').document('store_lock')
 
     status_str = 'locked' if current_status else 'unlocked'
-    prev_status = None
 
+    prev_status = None
     doc = config_doc.get()
+
     if doc.exists:
         prev_status = doc.to_dict().get('status')
 
@@ -301,6 +369,11 @@ def main():
 
     # Check lock status
     is_locked = hiidef.is_store_locked()
+
+    # BETA TESTING NEW LOCK CHECK 
+    is_locked_v2 = hiidef.is_store_locked_v2()
+    print(f"[BETA DEBUG] v1={is_locked} | v2={is_locked_v2}")
+    # END BETA TEST 
 
 
     if is_locked is None:
